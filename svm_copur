@@ -1,0 +1,128 @@
+library(Rwordseg)
+library(tm)
+library(tmcn)
+library(wordcloud)
+rm(list = ls())  #clear cache
+# ctrl + L 
+# save.image("f:/426.RData") specified address
+installDict(file.choose(), dictname = "meddevices_dictionay.scel") #import
+installDict(file.choose(), dictname = "vocabulary_set.scel")
+installDict(file.choose(), dictname = "vocabulary_ech_set.scel")
+
+
+#boneshuju <- read.table(file.choose(), header = TRUE, sep = ',',stringsAsFactors = FALSE)  #This is a table with headers, including two columns of type and data
+#todist <- segmentCN(boneshuju$text)
+#boneshuju <- readLines(file = file.choose(), encoding = "UTF-8")
+boneshuju <- read.csv(file.choose(), header = T, stringsAsFactors = F)
+
+str(boneshuju)
+#jiaru zidingyi ciyu
+dir <- c('bonus','medical')
+insertWords(dir)
+
+#zhiding renming shibie
+segment.options(isNameRecognition = T)
+
+#boneshuju <- readLines(file.choose(), encoding = "UTF = 8")  #readlinesu
+length(boneshuju$text)
+boneshuju.temp <- gsub("[0-9 0 1 2 3 4 5 6 7 8 9 < > ~]","", boneshuju$text)
+boneshuju.temp <- gsub('[a-zA-Z]', '', boneshuju.temp)
+boneshuju.temp <- segmentCN(boneshuju.temp)
+boneshuju.temp[1:2]
+
+#remove punctioures
+#stopwords <- unlist(read.table("G:/RRR/stopworddd(bone).txt", encoding = "UTF-8", stringsAsFactors = F, sep = "\n"))
+stopwords <- unlist(readLines("D:/R/RRR/stopworddd(bone).txt", encoding = "UTF-8"))
+removeStopWords <- function(x,stopwords) {
+  temp <- character(0)
+  index <- 1
+  xLen <- length(x)
+  while (index <= xLen) {
+    if (length(stopwords[stopwords==x[index]]) <1)
+      temp<- c(temp,x[index])
+    index <- index +1
+  }
+  temp
+}
+boneshuju.temp2 <- lapply(boneshuju.temp, removeStopWords, stopwords)
+boneshuju.temp2[1:2]
+
+#fang an 2
+mystopwords <- read.table(file = file.choose(), stringsAsFactors = FALSE)
+mystopwords <- as.vector(mystopwords[,1])
+removewords <- function(target_words,stop_words){
+         target_words = target_words[target_words%in%stop_words==FALSE]
+         return(target_words)
+}
+segword2 <- sapply(X = boneshuju.temp, FUN = removewords, mystopwords)
+
+#output last outcome
+write.table(t(boneshuju.temp2), file = "f:/seged.txt", append = T,
+            col.names = F, row.names = F, sep = "\n")
+
+#Word cloud, used to retrieve inaccurate words, need to loop custom stop words and participles
+words <- lapply(boneshuju.temp2, strsplit, " ") #ATTENTION！！！“ ”must contain！！！
+wordsNum <- table(unlist(words))
+wordsNum <- sort(wordsNum) #paixu
+wordsData <- data.frame(words = names(wordsNum), freq = wordsNum)
+library(wordcloud)  #jiazai ciyun bao
+ciyun.top150 <- tail(wordsData, 150)
+colors = brewer.pal(8, "Dark2")
+wordcloud(ciyun.top150$words, ciyun.top150$freq.Freq, 
+          scale = c(8, 0.5), colors = colors, random.order = F)  #Pay attention to check whether the variable name is correct
+#wordcloud(ciyun.top150[,1], ciyun.top150[,3], scale = c(8, 0.5), colors = colors, random.order = F)
+
+#Clustering test
+corpus <- Corpus(VectorSource(boneshuju.temp2))  #Convert text to corpus
+boneshuju.dtm <- DocumentTermMatrix(corpus, 
+                                    control = list(wordLengths = c(1, Inf)))  #Convert corpus to document = entry matrix
+boneshuju.matrix <- as.matrix(boneshuju.dtm)  #Convert a document-entry matrix to a normal matrix
+k <- 9  #julei shumu
+kmeansRes <- kmeans(boneshuju.matrix, k)
+mode(kmeansRes)  #kmeansRes de neirong
+names(kmeansRes)
+kmeansRes$size  #meige leibie xia you duoshao shuju
+boneshuju.kmeansRes <- list(content = boneshuju, type = kmeansRes$cluster)
+write.csv(boneshuju.kmeansRes, "boneshuju_kmeansRes.csv")
+fix(boneshuju.kmeansRes)
+
+#Classified test
+boneshuju.train <- read.csv(file.choose(), header = T, stringsAsFactors = F)  #daoru xunlianji
+length(boneshuju.train$text)  #
+table(boneshuju.train$type)
+length(boneshuju$text)  
+
+boneshuju.train.temp <- gsub("[0-9 0 1 2 3 4 5 6 7 8 9 < > ~]","", boneshuju.train$text)  
+boneshuju.temp <- gsub('[a-zA-Z]', '', boneshuju.train.temp)
+boneshuju.train.temp <- segmentCN(boneshuju.train.temp)  #fenci
+boneshuju.train.temp2 <- lapply(boneshuju.train.temp, removeStopWords, stopwords)  #qu tingci
+#boneshuju.temp2 <- lapply(boneshuju.temp, removeStopWords, stopwords)  
+#Merge the training set (the first number of data) and the prediction set (the last number) into boneshuju.all, obtain its corpus, and get the document-entry matrix.
+boneshuju.all <- character(0)  # e <- numeric()    Generates an empty vector e of numeric type. 
+Character () and so on. 
+The length at this time is object 0. 
+Adding a new element at this point will automatically adjust the length of e.
+boneshuju.all[1:100] <- boneshuju.train.temp2  #[1:N]
+boneshuju.all[101:1100] <- boneshuju.temp2      #[N+1: N+1+M-1]
+length(boneshuju.all)
+corpusAll <- Corpus(VectorSource(boneshuju.all))
+boneshuju.all.dtm <- DocumentTermMatrix(corpusAll, control = list(wordLengths = c(2, Inf)))  #wordLengths=c(2,Inf) 
+dtmAll_matrix <- as.matrix(boneshuju.all.dtm)
+inspect(dtmAll_matrix[1:10, 1:2])
+
+
+rownames(dtmAll_matrix)[1:100] <- boneshuju.train$type
+rownames(dtmAll_matrix)[101:1100] <- c("")
+train <- dtmAll_matrix[1:100, ]
+predict <- dtmAll_matrix[101:1100, ]
+trainClass <- as.factor(rownames(train))
+library(class)
+boneshuju_knnClassify <- knn(train, predict, trainClass)  
+length(boneshuju_knnClassify)
+boneshuju_knnClassify[1:10]
+table(boneshuju_knnClassify)
+boneshuju.knnResult <- list(type = boneshuju_knnClassify, text = boneshuju) 
+boneshuju.knnResult <- as.data.frame(boneshuju.knnResult)  #list >- data.frame
+fix(boneshuju.knnResult)
+write.csv(boneshuju.knnResult, "fenleijieguo.csv")
+
